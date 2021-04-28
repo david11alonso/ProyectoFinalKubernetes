@@ -1,0 +1,101 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coe-config-es
+data:
+  lstreamd_default.conf: |
+    {
+        "Endpoints": {
+            "ES": {
+                "ServerUrl": "elasticsearch.universidad.svc.cluster.local:9200",
+                "IndexPrefix":"adc_coe",
+                "IndexInterval": "daily",
+                "RecordType": {
+                    "HTTP": "all",
+                    "TCP": "all",
+                    "SWG": "all",
+                    "VPN": "all",
+                    "NGS": "all",
+                    "ICA": "all",
+                    "APPFW": "none",
+                    "BOT": "none",
+                    "VIDEOOPT": "none",
+                    "BURST_CQA": "none",
+                    "SLA": "none",
+                    "MONGO": "none"
+                },
+                "ProcessAlways": "no",
+                "ProcessYieldTimeOut": "500",
+                "MaxConnections": "512",
+                "ElkMaxSendBuffersPerSec": "64",
+                "JsonFileDump": "no"
+            }
+        }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coe-es
+  labels: 
+    app: coe-es
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: coe-es
+  template:
+    metadata:
+      name: coe-es
+      labels:
+        app: coe-es
+    spec:
+      containers:
+        - name: coe-es
+          image: "quay.io/citrix/citrix-observability-exporter:1.2.001"
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 5557
+              name: lstream
+          volumeMounts:
+            - name: lstreamd-config-es
+              mountPath: /var/logproxy/lstreamd/conf/lstreamd_default.conf
+              subPath: lstreamd_default.conf
+            - name: core-data
+              mountPath: /cores/
+      volumes:
+        - name: lstreamd-config-es
+          configMap:
+            name: coe-config-es
+        - name: core-data
+          emptyDir: {}
+---
+# Citrix-observability-exporter headless service  
+apiVersion: v1
+kind: Service
+metadata:
+  name: coe-es
+  labels:
+    app: coe-es
+spec:
+  clusterIP: None
+  ports:
+    - port: 5557
+      protocol: TCP
+  selector:
+      app: coe-es
+---
+# Citrix-observability-exporter NodePort service
+apiVersion: v1
+kind: Service
+metadata:
+  name: coe-es-nodeport
+  labels:
+    app: coe-es
+spec:
+  type: NodePort
+  ports:
+    - port: 5557
+      protocol: TCP
+  selector: 
+      app: coe-es
